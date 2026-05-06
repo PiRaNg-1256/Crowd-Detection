@@ -23,11 +23,35 @@ def main():
         print("ERROR: Cannot open webcam (device 0)")
         return
 
+    hog = cv2.HOGDescriptor()
+    hog.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
+
     while True:
         ret, frame = cap.read()
         if not ret:
             print("ERROR: Cannot read frame")
             break
+
+        # Resize to 640px width for performance
+        h, w = frame.shape[:2]
+        scale = 640 / w
+        small = cv2.resize(frame, (640, int(h * scale)))
+
+        # HOG detection on resized frame
+        boxes, _ = hog.detectMultiScale(small, winStride=(8, 8), padding=(4, 4), scale=1.05)
+        count = len(boxes)
+
+        # Draw green bounding boxes (scaled back to original frame coords)
+        for (x, y, bw, bh) in boxes:
+            x1 = int(x / scale)
+            y1 = int(y / scale)
+            x2 = int((x + bw) / scale)
+            y2 = int((y + bh) / scale)
+            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+
+        # People count overlay - top-left
+        cv2.putText(frame, f"People: {count}", (10, 40),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 0), 2)
 
         cv2.imshow("Crowd Monitor", frame)
 
