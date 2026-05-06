@@ -2,7 +2,14 @@ import cv2
 import json
 import os
 import threading
-import winsound
+
+try:
+    import winsound
+    def _beep():
+        winsound.Beep(1000, 500)
+except ImportError:
+    def _beep():
+        print("\a", end="", flush=True)  # terminal bell fallback on non-Windows
 
 CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
 
@@ -12,6 +19,9 @@ def load_config():
             data = json.load(f)
         threshold = int(data.get("threshold", 10))
     except (FileNotFoundError, json.JSONDecodeError, ValueError):
+        threshold = 10
+    if threshold < 1:
+        print("WARNING: threshold must be >= 1, defaulting to 10")
         threshold = 10
     print(f"Threshold set to: {threshold}")
     return threshold
@@ -29,58 +39,63 @@ def main():
 
     was_overcrowded = False
 
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            print("ERROR: Cannot read frame")
-            break
+    try:
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                print("ERROR: Cannot read frame")
+                break
 
-        # Resize to 640px width for performance
-        h, w = frame.shape[:2]
-        scale = 640 / w
-        small = cv2.resize(frame, (640, int(h * scale)))
+            # Resize to 640px width for performance (skip if already narrow)
+            h, w = frame.shape[:2]
+            if w > 640:
+                scale = 640 / w
+                small = cv2.resize(frame, (640, int(h * scale)))
+            else:
+                scale = 1.0
+                small = frame
 
-        # HOG detection on resized frame
-        detected = hog.detectMultiScale(small, winStride=(8, 8), padding=(4, 4), scale=1.05)
-        boxes = detected[0] if (len(detected) == 2 and len(detected[0]) > 0) else []
-        count = len(boxes)
+            # HOG detection on resized frame
+            detected = hog.detectMultiScale(small, winStride=(8, 8), padding=(4, 4), scale=1.05)
+            boxes = detected[0] if (len(detected) == 2 and len(detected[0]) > 0) else []
+            count = len(boxes)
 
-        # Draw green bounding boxes (scaled back to original frame coords)
-        for (x, y, bw, bh) in boxes:
-            x1 = int(x / scale)
-            y1 = int(y / scale)
-            x2 = int((x + bw) / scale)
-            y2 = int((y + bh) / scale)
-            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            # Draw green bounding boxes (scaled back to original frame coords)
+            for (x, y, bw, bh) in boxes:
+                x1 = int(x / scale)
+                y1 = int(y / scale)
+                x2 = int((x + bw) / scale)
+                y2 = int((y + bh) / scale)
+                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
 
-        # People count overlay — top-left
-        cv2.putText(frame, f"People: {count}", (10, 40),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 0), 2)
+            # People count overlay — top-left
+            cv2.putText(frame, f"People: {count}", (10, 40),
+                        cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 0), 2)
 
-        # Overcrowding alert
-        overcrowded = count > threshold
+            # Overcrowding alert
+            overcrowded = count > threshold
 
-        if overcrowded:
-            fh, fw = frame.shape[:2]
-            cv2.rectangle(frame, (0, 0), (fw - 1, fh - 1), (0, 0, 255), 20)
-            text = "OVERCROWDED"
-            (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 2.0, 4)
-            tx = max(0, (fw - tw) // 2)
-            ty = fh // 2 + th // 2
-            cv2.putText(frame, text, (tx, ty),
-                        cv2.FONT_HERSHEY_SIMPLEX, 2.0, (0, 0, 255), 4)
-            if not was_overcrowded:
-                threading.Thread(target=lambda: winsound.Beep(1000, 500), daemon=True).start()
+            if overcrowded:
+                fh, fw = frame.shape[:2]
+                cv2.rectangle(frame, (0, 0), (fw - 1, fh - 1), (0, 0, 255), 20)
+                text = "OVERCROWDED"
+                (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 2.0, 4)
+                tx = max(0, (fw - tw) // 2)
+                ty = fh // 2 + th // 2
+                cv2.putText(frame, text, (tx, ty),
+                            cv2.FONT_HERSHEY_SIMPLEX, 2.0, (0, 0, 255), 4)
+                if not was_overcrowded:
+                    threading.Thread(target=_beep, daemon=True).start()
 
-        was_overcrowded = overcrowded
+            was_overcrowded = overcrowded
 
-        cv2.imshow("Crowd Monitor", frame)
+            cv2.imshow("Crowd Monitor", frame)
 
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
-
-    cap.release()
-    cv2.destroyAllWindows()
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+    finally:
+        cap.release()
+        cv2.destroyAllWindows()
 
 if __name__ == "__main__":
     main()

@@ -25,9 +25,9 @@ pip install opencv-python
 ## How to Run
 
 1. Open **Command Prompt**
-2. Navigate to this folder:
+2. Navigate to the folder where you saved this project, e.g.:
    ```
-   cd D:\crowd-detection
+   cd path\to\crowd-detection
    ```
 3. Start the program:
    ```
