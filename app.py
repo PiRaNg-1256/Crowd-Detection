@@ -1,8 +1,9 @@
 import cv2
 import json
+import os
 import winsound
 
-CONFIG_PATH = "config.json"
+CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
 
 def load_config():
     try:
