@@ -26,6 +26,8 @@ def main():
     hog = cv2.HOGDescriptor()
     hog.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
 
+    was_overcrowded = False
+
     while True:
         ret, frame = cap.read()
         if not ret:
@@ -50,9 +52,22 @@ def main():
             y2 = int((y + bh) / scale)
             cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
 
-        # People count overlay - top-left
+        # People count overlay — top-left
         cv2.putText(frame, f"People: {count}", (10, 40),
                     cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 0), 2)
+
+        # Overcrowding alert
+        overcrowded = count > threshold
+
+        if overcrowded:
+            fh, fw = frame.shape[:2]
+            cv2.rectangle(frame, (0, 0), (fw - 1, fh - 1), (0, 0, 255), 20)
+            cv2.putText(frame, "OVERCROWDED", (fw // 2 - 200, fh // 2),
+                        cv2.FONT_HERSHEY_SIMPLEX, 2.0, (0, 0, 255), 4)
+            if not was_overcrowded:
+                winsound.Beep(1000, 500)
+
+        was_overcrowded = overcrowded
 
         cv2.imshow("Crowd Monitor", frame)
 
