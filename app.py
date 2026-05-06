@@ -38,7 +38,8 @@ def main():
         small = cv2.resize(frame, (640, int(h * scale)))
 
         # HOG detection on resized frame
-        boxes, _ = hog.detectMultiScale(small, winStride=(8, 8), padding=(4, 4), scale=1.05)
+        detected = hog.detectMultiScale(small, winStride=(8, 8), padding=(4, 4), scale=1.05)
+        boxes = detected[0] if len(detected) == 2 else []
         count = len(boxes)
 
         # Draw green bounding boxes (scaled back to original frame coords)
