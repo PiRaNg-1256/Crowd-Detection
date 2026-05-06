@@ -1,6 +1,7 @@
 import cv2
 import json
 import os
+import threading
 import winsound
 
 CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
@@ -41,7 +42,7 @@ def main():
 
         # HOG detection on resized frame
         detected = hog.detectMultiScale(small, winStride=(8, 8), padding=(4, 4), scale=1.05)
-        boxes = detected[0] if len(detected) == 2 else []
+        boxes = detected[0] if (len(detected) == 2 and len(detected[0]) > 0) else []
         count = len(boxes)
 
         # Draw green bounding boxes (scaled back to original frame coords)
@@ -62,10 +63,14 @@ def main():
         if overcrowded:
             fh, fw = frame.shape[:2]
             cv2.rectangle(frame, (0, 0), (fw - 1, fh - 1), (0, 0, 255), 20)
-            cv2.putText(frame, "OVERCROWDED", (fw // 2 - 200, fh // 2),
+            text = "OVERCROWDED"
+            (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 2.0, 4)
+            tx = max(0, (fw - tw) // 2)
+            ty = fh // 2
+            cv2.putText(frame, text, (tx, ty),
                         cv2.FONT_HERSHEY_SIMPLEX, 2.0, (0, 0, 255), 4)
             if not was_overcrowded:
-                winsound.Beep(1000, 500)
+                threading.Thread(target=lambda: winsound.Beep(1000, 500), daemon=True).start()
 
         was_overcrowded = overcrowded
 
