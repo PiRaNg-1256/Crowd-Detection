@@ -66,7 +66,7 @@ def main():
             text = "OVERCROWDED"
             (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 2.0, 4)
             tx = max(0, (fw - tw) // 2)
-            ty = fh // 2
+            ty = fh // 2 + th // 2
             cv2.putText(frame, text, (tx, ty),
                         cv2.FONT_HERSHEY_SIMPLEX, 2.0, (0, 0, 255), 4)
             if not was_overcrowded:
