@@ -85,6 +85,7 @@ def main():
 
     smoothing_window = max(1, int(config.get("smoothing_window", 8)))
     count_history = deque(maxlen=smoothing_window)
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
 
     was_overcrowded = False
 
@@ -103,9 +104,14 @@ def main():
                 scale = 1.0
                 small = frame.copy()
 
+            # CLAHE: enhance local contrast for outdoor lighting
+            gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
+            enhanced_gray = clahe.apply(gray)
+            detect_frame = cv2.cvtColor(enhanced_gray, cv2.COLOR_GRAY2BGR)
+
             # HOG detection with groupThreshold=1 (merges overlapping rects internally)
             raw = hog.detectMultiScale(
-                small,
+                detect_frame,
                 winStride=tuple(hog_cfg["win_stride"]),
                 padding=tuple(hog_cfg["padding"]),
                 scale=hog_cfg["scale"],
