@@ -1,3 +1,11 @@
 {
-  "threshold": 5
+  "threshold": 5,
+  "min_confidence": 0.3,
+  "smoothing_window": 8,
+  "detect_every_n_frames": 3,
+  "hog": {
+    "win_stride": [8, 8],
+    "padding": [8, 8],
+    "scale": 1.03
+  }
 }

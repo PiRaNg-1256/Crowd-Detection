@@ -86,6 +86,10 @@ def main():
     smoothing_window = max(1, int(config.get("smoothing_window", 8)))
     count_history = deque(maxlen=smoothing_window)
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    detect_every = max(1, int(config.get("detect_every_n_frames", 3)))
+    frame_idx = 0
+    cached_boxes = []
+    cached_smoothed_count = 0
 
     was_overcrowded = False
 
@@ -104,29 +108,38 @@ def main():
                 scale = 1.0
                 small = frame.copy()
 
-            # CLAHE: enhance local contrast for outdoor lighting
-            gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
-            enhanced_gray = clahe.apply(gray)
-            detect_frame = cv2.cvtColor(enhanced_gray, cv2.COLOR_GRAY2BGR)
+            if frame_idx % detect_every == 0:
+                # CLAHE: enhance local contrast for outdoor lighting
+                gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
+                enhanced_gray = clahe.apply(gray)
+                detect_frame = cv2.cvtColor(enhanced_gray, cv2.COLOR_GRAY2BGR)
 
-            # HOG detection with groupThreshold=1 (merges overlapping rects internally)
-            raw = hog.detectMultiScale(
-                detect_frame,
-                winStride=tuple(hog_cfg["win_stride"]),
-                padding=tuple(hog_cfg["padding"]),
-                scale=hog_cfg["scale"],
-                groupThreshold=1,
-            )
-            if len(raw) == 2 and len(raw[0]) > 0:
-                raw_boxes, raw_weights = raw[0], raw[1].flatten()
-                confident = [b for b, wt in zip(raw_boxes, raw_weights) if wt >= min_conf]
-                boxes = nms(confident) if len(confident) > 0 else []
+                # HOG detection with groupThreshold=1 (merges overlapping rects internally)
+                raw = hog.detectMultiScale(
+                    detect_frame,
+                    winStride=tuple(hog_cfg["win_stride"]),
+                    padding=tuple(hog_cfg["padding"]),
+                    scale=hog_cfg["scale"],
+                    groupThreshold=1,
+                )
+                if len(raw) == 2 and len(raw[0]) > 0:
+                    raw_boxes, raw_weights = raw[0], raw[1].flatten()
+                    confident = [b for b, wt in zip(raw_boxes, raw_weights) if wt >= min_conf]
+                    boxes = nms(confident) if len(confident) > 0 else []
+                else:
+                    boxes = []
+
+                count = len(boxes)
+                count_history.append(count)
+                smoothed_count = int(statistics.median(count_history)) if count_history else 0
+                cached_boxes = boxes
+                cached_smoothed_count = smoothed_count
             else:
-                boxes = []
+                # Reuse last detection result
+                boxes = cached_boxes
+                smoothed_count = cached_smoothed_count
 
-            count = len(boxes)
-            count_history.append(count)
-            smoothed_count = int(statistics.median(count_history)) if count_history else 0
+            frame_idx += 1
 
             # Draw green bounding boxes on original frame
             for (x, y, bw, bh) in boxes:
