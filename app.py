@@ -83,6 +83,9 @@ def main():
     hog = cv2.HOGDescriptor()
     hog.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
 
+    smoothing_window = max(1, int(config.get("smoothing_window", 8)))
+    count_history = deque(maxlen=smoothing_window)
+
     was_overcrowded = False
 
     try:
@@ -116,6 +119,8 @@ def main():
                 boxes = []
 
             count = len(boxes)
+            count_history.append(count)
+            smoothed_count = int(statistics.median(count_history)) if count_history else 0
 
             # Draw green bounding boxes on original frame
             for (x, y, bw, bh) in boxes:
@@ -125,10 +130,10 @@ def main():
                 y2 = int((y + bh) / scale)
                 cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
 
-            cv2.putText(frame, f"People: {count}", (10, 40),
-                        cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 0), 2)
+            cv2.putText(frame, f"People: {smoothed_count} (raw: {count})", (10, 40),
+                        cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 0), 2)
 
-            overcrowded = count > threshold
+            overcrowded = smoothed_count > threshold
 
             if overcrowded:
                 fh, fw = frame.shape[:2]
