@@ -14,11 +14,16 @@ except ImportError:
     def _beep():
         print("\a", end="", flush=True)
 
+def _alert_loop(stop_event):
+    """Loops beep until stop_event is set."""
+    while not stop_event.is_set():
+        _beep()
+
 CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
 
 DEFAULTS = {
     "threshold": 5,
-    "min_confidence": 0.3,
+    "min_confidence": 0.0,
     "smoothing_window": 8,
     "detect_every_n_frames": 3,
     "hog": {"win_stride": [8, 8], "padding": [8, 8], "scale": 1.03},
@@ -92,6 +97,8 @@ def main():
     cached_smoothed_count = 0
 
     was_overcrowded = False
+    alert_stop = threading.Event()
+    alert_stop.set()  # start in "stopped" state
 
     try:
         while True:
@@ -114,17 +121,19 @@ def main():
                 enhanced_gray = clahe.apply(gray)
                 detect_frame = cv2.cvtColor(enhanced_gray, cv2.COLOR_GRAY2BGR)
 
-                # HOG detection with groupThreshold=1 (merges overlapping rects internally)
-                raw = hog.detectMultiScale(
+                # HOG detection — no groupThreshold (wrong param name in Python binding)
+                # Default finalThreshold=0.0 keeps all SVM-positive detections
+                raw_boxes, raw_weights = hog.detectMultiScale(
                     detect_frame,
                     winStride=tuple(hog_cfg["win_stride"]),
                     padding=tuple(hog_cfg["padding"]),
                     scale=hog_cfg["scale"],
-                    groupThreshold=1,
                 )
-                if len(raw) == 2 and len(raw[0]) > 0:
-                    raw_boxes, raw_weights = raw[0], raw[1].flatten()
-                    confident = [b for b, wt in zip(raw_boxes, raw_weights) if wt >= min_conf]
+                # Confidence filter: HOG weights are small floats, NOT 0-1 normalized.
+                # min_conf=0.0 in config.json disables filtering (recommended starting point).
+                if len(raw_boxes) > 0:
+                    weights_flat = raw_weights.flatten()
+                    confident = [b for b, wt in zip(raw_boxes, weights_flat) if wt >= min_conf]
                     boxes = nms(confident) if len(confident) > 0 else []
                 else:
                     boxes = []
@@ -135,8 +144,9 @@ def main():
                 cached_boxes = boxes
                 cached_smoothed_count = smoothed_count
             else:
-                # Reuse last detection result
+                # Reuse last detection result — count mirrors smoothed on cached frames
                 boxes = cached_boxes
+                count = cached_smoothed_count
                 smoothed_count = cached_smoothed_count
 
             frame_idx += 1
@@ -152,7 +162,7 @@ def main():
             cv2.putText(frame, f"People: {smoothed_count} (raw: {count})", (10, 40),
                         cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 0), 2)
 
-            overcrowded = smoothed_count > threshold
+            overcrowded = smoothed_count >= threshold
 
             if overcrowded:
                 fh, fw = frame.shape[:2]
@@ -164,7 +174,13 @@ def main():
                 cv2.putText(frame, text, (tx, ty),
                             cv2.FONT_HERSHEY_SIMPLEX, 2.0, (0, 0, 255), 4)
                 if not was_overcrowded:
-                    threading.Thread(target=_beep, daemon=True).start()
+                    # Start looping alert
+                    alert_stop.clear()
+                    threading.Thread(target=_alert_loop, args=(alert_stop,), daemon=True).start()
+            else:
+                if was_overcrowded:
+                    # Stop looping alert
+                    alert_stop.set()
 
             was_overcrowded = overcrowded
             cv2.imshow("Crowd Monitor", frame)

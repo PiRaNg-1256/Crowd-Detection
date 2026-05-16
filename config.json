@@ -1,6 +1,6 @@
 {
-  "threshold": 5,
-  "min_confidence": 0.3,
+  "threshold": 1,
+  "min_confidence": 0.0,
   "smoothing_window": 8,
   "detect_every_n_frames": 3,
   "hog": {
